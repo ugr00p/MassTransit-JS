@@ -3,8 +3,7 @@ import {ReceiveEndpoint} from './receiveEndpoint';
 import {Guid} from 'guid-typescript';
 import {SendEndpoint} from './sendEndpoint';
 import {ConsumeContext} from './consumeContext';
-import {MessageType} from './messageType';
-
+import {FaultMessageType, MessageType} from './messageType';
 export interface RequestClient<TRequest extends MessageMap, TResponse extends MessageMap> {
     getResponse(request: TRequest): Promise<ConsumeContext<TResponse>>
 }
@@ -14,17 +13,20 @@ export class RequestClient<TRequest extends MessageMap, TResponse extends Messag
     private sendEndpoint: SendEndpoint;
     private readonly requestType: MessageType;
     private responseType: MessageType;
+    private faultResponseType: FaultMessageType;
     private readonly responseAddress: string;
 
     constructor(receiveEndpoint: ReceiveEndpoint, sendEndpoint: SendEndpoint, requestType: MessageType, responseType: MessageType) {
         this.sendEndpoint = sendEndpoint;
         this.requestType = requestType;
         this.responseType = responseType;
+        this.faultResponseType = new FaultMessageType(requestType);
 
         this.responseAddress = receiveEndpoint.address.toString();
         this.responses = {};
 
         receiveEndpoint.handle<TResponse>(responseType, response => this.onResponse(response));
+        receiveEndpoint.handleError<TResponse>(this.faultResponseType, response => this.onErrorResponse(response));
     }
 
     getResponse(request: TRequest): Promise<ConsumeContext<TResponse>> {
@@ -51,6 +53,16 @@ export class RequestClient<TRequest extends MessageMap, TResponse extends Messag
             }
         }
     }
+
+  private async onErrorResponse(context: ConsumeContext<TResponse>): Promise<void> {
+    if (context.requestId) {
+      let pendingRequest = this.responses[context.requestId];
+      if (pendingRequest) {
+        pendingRequest.reject(context.message);
+        delete this.responses[context.requestId];
+      }
+    }
+  }
 }
 
 class ResponseFuture<TResponse extends MessageMap> {

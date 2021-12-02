@@ -21,3 +21,13 @@ export class MessageType {
     }
 }
 
+export class FaultMessageType {
+  messageType: MessageType;
+  constructor(messageType: MessageType) {
+    this.messageType = messageType;
+  }
+
+  toString(): string {
+    return `urn:message:MassTransit:Fault[[${this.messageType.ns}:${this.messageType.name}]]`;
+  }
+}

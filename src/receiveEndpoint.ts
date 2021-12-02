@@ -7,7 +7,7 @@ import {MessageMap, MessageTypeDeserializer} from './serialization';
 import {SendEndpoint} from './sendEndpoint';
 import {SendEndpointArguments, Transport} from './transport';
 import {ChannelContext} from './channelContext';
-import {MessageType} from './messageType';
+import {FaultMessageType, MessageType} from './messageType';
 import {EndpointSettings, RabbitMqEndpointAddress, RabbitMqHostAddress} from './RabbitMqEndpointAddress';
 
 /**
@@ -49,6 +49,23 @@ export class ReceiveEndpoint extends Transport implements ReceiveEndpointConfigu
         return this;
     }
 
+    handleError<T extends Record<string, any>>(messageType: FaultMessageType, listener: (message: ConsumeContext<T>) => void): this {
+
+    if (!messageType)
+      throw new Error(`Invalid argument: FaultMessageType`);
+
+    let typeName = messageType.toString();
+
+    if (this._messageTypes.hasOwnProperty(typeName)) {
+      this._messageTypes[typeName].on(listener);
+    } else {
+      let deserializer = new MessageTypeDeserializer<T>(this);
+      this._messageTypes[typeName] = deserializer;
+      deserializer.on(listener);
+    }
+
+    return this;
+  }
     private readonly _messageTypes: MessageMap;
 
     constructor(bus: Bus, queueName: string, cb?: (cfg: ReceiveEndpointConfigurator) => void, options: ReceiveEndpointOptions = defaultReceiveEndpointOptions) {
