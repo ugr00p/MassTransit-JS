@@ -1,10 +1,6 @@
 {
   "name": "@ugr00p/masstransit-js",
   "version": "0.1.5",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/MassTransit/MassTransit-JS.git"
-  },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com/ugr00p",
     "access": "public"

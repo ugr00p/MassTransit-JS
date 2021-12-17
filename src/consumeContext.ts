@@ -34,7 +34,7 @@ export class ConsumeContext<T extends object> implements ConsumeContext<T> {
 
             let sendEndpoint = this.receiveEndpoint.sendEndpoint({exchange: address.name, ...address});
 
-            await sendEndpoint.send<T>(message, send => {
+            await sendEndpoint.send<T>(message, (send: SendContext<T>) => {
                 send.requestId = this.requestId;
                 if (cb) cb(send);
             });
