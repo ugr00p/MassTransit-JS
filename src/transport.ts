@@ -7,6 +7,7 @@ import {Bus} from './bus';
 import {ConnectionContext} from './connectionContext';
 import {ChannelContext} from './channelContext';
 import {RabbitMqEndpointAddress} from './RabbitMqEndpointAddress';
+import {MessageOptions} from "./messageType";
 
 export interface SendEndpointArguments {
     exchange?: string
@@ -37,14 +38,15 @@ class PendingPublish {
     exchange: string;
     routingKey: string;
     message: Buffer;
-
+    options: any;
     resolve: (value: boolean | PromiseLike<boolean>) => void;
     reject: (reason?: any) => void;
 
-    constructor(exchange: string, routingKey: string, message: Buffer, resolve: (value: boolean | PromiseLike<boolean>) => void, reject: (reason?: any) => void) {
+    constructor(exchange: string, routingKey: string, message: Buffer, resolve: (value: boolean | PromiseLike<boolean>) => void, reject: (reason?: any) => void, options?: any) {
         this.exchange = exchange;
         this.routingKey = routingKey;
         this.message = message;
+        this.options = options;
         this.resolve = resolve;
         this.reject = reject;
     }
@@ -79,7 +81,7 @@ export class Transport extends EventEmitter implements Transport {
         return new SendEndpoint(this, exchange, routingKey);
     }
 
-    async send<T extends MessageMap>(exchange: string, routingKey: string, send: SendContext<T>) {
+    async send<T extends MessageMap>(exchange: string, routingKey: string, send: SendContext<T>, options?: any) {
 
         let destination = exchange;
         if (!destination || destination === '')
@@ -89,7 +91,7 @@ export class Transport extends EventEmitter implements Transport {
 
         const body = this.serializer.serialize(send);
 
-        await this.basicPublish(exchange, routingKey, body);
+        await this.basicPublish(exchange, routingKey, body, options);
     }
 
     async onConnect(context: ConnectionContext): Promise<void> {
@@ -116,18 +118,18 @@ export class Transport extends EventEmitter implements Transport {
             let pendingPublish = this.pendingPublishQueue.shift();
             if (!pendingPublish) break;
 
-            let {exchange, message, routingKey} = pendingPublish;
+            let {exchange, message, routingKey, options} = pendingPublish;
 
-            await this.basicPublish(exchange, routingKey, message);
+            await this.basicPublish(exchange, routingKey, message, options);
         }
     }
 
-    private async basicPublish(exchange: string, routingKey: string, body: Buffer): Promise<boolean> {
+    private async basicPublish(exchange: string, routingKey: string, body: Buffer, options?: MessageOptions): Promise<boolean> {
 
         if (this.channel) {
             let channel = this.channel;
             return new Promise((resolve, reject) => {
-                const result = channel.publish(exchange, routingKey, body, {persistent: true},
+                const result = channel.publish(exchange, routingKey, body, options,
                     err => {
                         if (err) {
                             reject(err);

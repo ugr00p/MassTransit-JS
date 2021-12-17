@@ -17,13 +17,13 @@ export class SendEndpoint implements SendEndpoint {
         this.routingKey = routingKey ?? '';
     }
 
-    async send<T extends object>(message: T, cb?: (send: SendContext<T>) => void) {
+    async send<T extends object>(message: T, options?: any, cb?: (send: SendContext<T>) => void) {
         let send = new SendContext<T>(message);
         if (cb) {
             cb(send);
         }
 
-        await this.transport.send(this.exchange, this.routingKey, send);
+        await this.transport.send(this.exchange, this.routingKey, send, options);
     }
 }
 

@@ -8,7 +8,7 @@ import {ConnectionContext} from './connectionContext';
 import {Guid} from 'guid-typescript';
 import {MessageMap} from './serialization';
 import {RequestClient} from './requestClient';
-import {MessageType} from './messageType';
+import {MessageOptions, MessageType} from './messageType';
 import {HostSettings, RabbitMqHostAddress} from './RabbitMqEndpointAddress';
 
 export interface Bus {
@@ -63,7 +63,7 @@ class MassTransitBus extends EventEmitter implements Bus {
 
         let sendEndpoint = this.busEndpoint.sendEndpoint(args);
 
-        return new RequestClient<TRequest, TResponse>(this.busEndpoint, sendEndpoint, args.requestType, args.responseType);
+        return new RequestClient<TRequest, TResponse>(this.busEndpoint, sendEndpoint, args.requestType, args.responseType, args.requestTimeOut, args.options);
     }
 
     async stop(): Promise<void> {
@@ -178,6 +178,8 @@ class MassTransitBus extends EventEmitter implements Bus {
 export interface RequestClientArguments extends SendEndpointArguments {
     requestType: MessageType
     responseType: MessageType
+    options? :MessageOptions
+    requestTimeOut?: number
 }
 
 interface BusOptions extends HostSettings {
