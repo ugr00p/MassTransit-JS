@@ -35,7 +35,7 @@ export class FaultMessageType {
 export class MessageOptions {
   persistent?: boolean;
   expiration?: string;
-  constructor(data: any) {
+  constructor(data?: any) {
     this.persistent = data.persistent || true;
     this.expiration = data.expiration;
   }
