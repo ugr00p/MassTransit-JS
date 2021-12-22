@@ -30,13 +30,17 @@ export class FaultMessageType {
   toString(): string {
     return `urn:message:MassTransit:Fault[[${this.messageType.ns}:${this.messageType.name}]]`;
   }
+
+  toMessageType(): Array<string> {
+    return [this.toString()];
+  }
 }
 
 export class MessageOptions {
   persistent?: boolean;
   expiration?: string;
   constructor(data?: any) {
-    this.persistent = data.persistent || true;
-    this.expiration = data.expiration;
+    this.persistent = data && data.persistent || true;
+    this.expiration = data && data.expiration;
   }
 }
