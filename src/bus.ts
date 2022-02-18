@@ -10,6 +10,7 @@ import {MessageMap} from './serialization';
 import {RequestClient} from './requestClient';
 import {MessageOptions, MessageType} from './messageType';
 import {HostSettings, RabbitMqHostAddress} from './RabbitMqEndpointAddress';
+import {AsyncReceiveEndpoint, AsyncReceiveEndpointConfigurator} from './AsyncReceiveEndpoint';
 
 export interface Bus {
     hostAddress: RabbitMqHostAddress
@@ -21,6 +22,7 @@ export interface Bus {
     on(event: 'error', listener: (err: any) => void): this
 
     receiveEndpoint(queueName: string, config: (endpoint: ReceiveEndpointConfigurator) => void, options?: ReceiveEndpointOptions): void
+    asyncReceiveEndpoint(queueName: string, config: (endpoint: AsyncReceiveEndpointConfigurator) => void, options?: ReceiveEndpointOptions): void
 
     sendEndpoint(args: SendEndpointArguments): SendEndpoint
 
@@ -33,6 +35,7 @@ export interface Bus {
 
 class MassTransitBus extends EventEmitter implements Bus {
     hostAddress: RabbitMqHostAddress;
+    connectionName?: string;
 
     /**
      * Connects a receive endpoint to the bus
@@ -49,6 +52,28 @@ class MassTransitBus extends EventEmitter implements Bus {
     receiveEndpoint(queueName: string, cb?: (cfg: ReceiveEndpointConfigurator) => void, options: ReceiveEndpointOptions = defaultReceiveEndpointOptions): ReceiveEndpoint {
 
         let endpoint = new ReceiveEndpoint(this, queueName, cb, {...defaultReceiveEndpointOptions, ...options});
+
+        this.connection?.then(connection => endpoint.onConnect({hostAddress: this.hostAddress, connection: connection}));
+
+        return endpoint;
+    }
+
+    /**
+     * Connects a receive endpoint to the bus
+     * This endpoint waits for a promise to resolve before acknowledging received messages.
+     *
+     * @remarks
+     * Once connected, the receive endpoint will remain connected until disconnected
+     *
+     * @param queueName - The input queue name
+     * @param cb - The configuration callback, used to add message handlers, etc.
+     * @param options - Options for the receive endpoint, such as queue/exchange properties, etc.
+     * @returns Nothing yet, but should return the receive endpoint so that it can be stopped
+     *
+     */
+    asyncReceiveEndpoint(queueName: string, cb?: (cfg: AsyncReceiveEndpointConfigurator) => void, options: ReceiveEndpointOptions = defaultReceiveEndpointOptions): AsyncReceiveEndpoint {
+
+        let endpoint = new AsyncReceiveEndpoint(this, queueName, cb, {...defaultReceiveEndpointOptions, ...options});
 
         this.connection?.then(connection => endpoint.onConnect({hostAddress: this.hostAddress, connection: connection}));
 
@@ -84,7 +109,7 @@ class MassTransitBus extends EventEmitter implements Bus {
 
             console.log('Bus stopped', this.hostAddress.toString());
         }
-        catch (e) {
+        catch (e: any) {
             console.error('failed to close bus', e.message);
         }
     }
@@ -107,10 +132,11 @@ class MassTransitBus extends EventEmitter implements Bus {
     private readonly _retryIntervalInSeconds: number;
     private readonly busEndpoint: ReceiveEndpoint;
 
-    constructor(hostAddress: RabbitMqHostAddress) {
+    constructor(hostAddress: RabbitMqHostAddress, connectionName?: string) {
         super();
 
         this.hostAddress = hostAddress;
+        this.connectionName = connectionName;
 
         this.setMaxListeners(0);
 
@@ -135,7 +161,7 @@ class MassTransitBus extends EventEmitter implements Bus {
         console.log('Connecting', this.hostAddress.toString());
 
         try {
-            this.connection = connect(this.hostAddress + '?heartbeat=60');
+            this.connection = connect(this.hostAddress + '?heartbeat=60', {clientProperties: {connection_name: this.connectionName}});
 
             let connection = await this.connection;
 
@@ -154,7 +180,7 @@ class MassTransitBus extends EventEmitter implements Bus {
 
             this.emit('connect', {hostAddress: this.hostAddress, connection: connection});
         }
-        catch (e) {
+        catch (e: any) {
             console.error('Connect failed', e.message);
 
             this.scheduleReconnect();
@@ -183,6 +209,7 @@ export interface RequestClientArguments extends SendEndpointArguments {
 }
 
 interface BusOptions extends HostSettings {
+    connectionName?: string
 }
 
 const defaults: BusOptions = {
@@ -195,7 +222,7 @@ export default function masstransit(options: BusOptions = defaults): Bus {
 
     const hostAddress = new RabbitMqHostAddress(settings);
 
-    let bus = new MassTransitBus(hostAddress);
+    let bus = new MassTransitBus(hostAddress, options.connectionName);
 
     process.on('SIGINT', async () => {
         await bus.stop();

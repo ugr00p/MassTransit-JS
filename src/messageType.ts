@@ -19,6 +19,10 @@ export class MessageType {
     toMessageType(): Array<string> {
         return [this.toString()];
     }
+
+    toExchange(): string {
+        return `${this.ns}:${this.name}`
+    }
 }
 
 export class FaultMessageType {

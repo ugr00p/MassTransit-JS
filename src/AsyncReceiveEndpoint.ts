@@ -1,37 +1,38 @@
-import {ConfirmChannel, ConsumeMessage, Options} from 'amqplib';
+import {ConfirmChannel, ConsumeMessage} from 'amqplib';
 import {Bus} from './bus';
 import {deserialize} from 'class-transformer';
 import {ConsumeContext} from './consumeContext';
 import {MessageContext} from './messageContext';
-import {MessageMap, MessageTypeDeserializer} from './serialization';
-import {SendEndpoint} from './sendEndpoint';
+import {MessageMap} from './serialization';
 import {SendEndpointArguments, Transport} from './transport';
 import {ChannelContext} from './channelContext';
-import {FaultMessageType, MessageType} from './messageType';
+import {MessageType} from './messageType';
 import {EndpointSettings, RabbitMqEndpointAddress, RabbitMqHostAddress} from './RabbitMqEndpointAddress';
+import {SendEndpoint} from './sendEndpoint';
+import {defaultReceiveEndpointOptions, ReceiveEndpointOptions} from './receiveEndpoint';
 
 /**
  * Configure the receive endpoint, including any message handlers
  */
-export interface ReceiveEndpointConfigurator {
+export interface AsyncReceiveEndpointConfigurator {
     queueName: string
     options: ReceiveEndpointOptions
 
-    handle<T extends MessageMap>(messageType: MessageType, listener: (message: ConsumeContext<T>) => void): this
+    handle<T extends MessageMap>(messageType: MessageType, listener: (message: ConsumeContext<T>) => Promise<void>): this
 }
 
-export interface ReceiveEndpoint {
+export interface AsyncReceiveEndpoint {
     hostAddress: RabbitMqHostAddress
     address: RabbitMqEndpointAddress
 
     sendEndpoint(args: SendEndpointArguments): SendEndpoint
 }
 
-export class ReceiveEndpoint extends Transport implements ReceiveEndpointConfigurator, ReceiveEndpoint {
+export class AsyncReceiveEndpoint extends Transport implements AsyncReceiveEndpointConfigurator, AsyncReceiveEndpoint {
     queueName: string;
     options: ReceiveEndpointOptions;
 
-    handle<T extends Record<string, any>>(messageType: MessageType, listener: (message: ConsumeContext<T>) => void): this {
+    handle<T extends Record<string, any>>(messageType: MessageType, listener: (message: ConsumeContext<T>) => Promise<void>): this {
 
         if (!messageType)
             throw new Error(`Invalid argument: messageType`);
@@ -41,36 +42,18 @@ export class ReceiveEndpoint extends Transport implements ReceiveEndpointConfigu
         if (this._messageTypes.hasOwnProperty(typeName)) {
             this._messageTypes[typeName].on(listener);
         } else {
-            let deserializer = new MessageTypeDeserializer<T>(this);
+            const deserializer = new AsyncMessageTypeDeserializer<T>(this, listener);
             this._messageTypes[typeName] = deserializer;
-            deserializer.on(listener);
             this.boundEvents.push(messageType);
         }
 
         return this;
     }
 
-    handleError<T extends Record<string, any>>(messageType: FaultMessageType, listener: (message: ConsumeContext<T>) => void): this {
-
-    if (!messageType)
-      throw new Error(`Invalid argument: FaultMessageType`);
-
-    let typeName = messageType.toString();
-
-    if (this._messageTypes.hasOwnProperty(typeName)) {
-      this._messageTypes[typeName].on(listener);
-    } else {
-      let deserializer = new MessageTypeDeserializer<T>(this);
-      this._messageTypes[typeName] = deserializer;
-      deserializer.on(listener);
-    }
-
-    return this;
-  }
     private readonly _messageTypes: MessageMap;
     private readonly boundEvents: MessageType[] = [];
 
-    constructor(bus: Bus, queueName: string, cb?: (cfg: ReceiveEndpointConfigurator) => void, options: ReceiveEndpointOptions = defaultReceiveEndpointOptions) {
+    constructor(bus: Bus, queueName: string, cb?: (cfg: AsyncReceiveEndpointConfigurator) => void, options: ReceiveEndpointOptions = defaultReceiveEndpointOptions) {
         super(bus);
 
         this.queueName = queueName;
@@ -98,7 +81,7 @@ export class ReceiveEndpoint extends Transport implements ReceiveEndpointConfigu
 
         await this.configureTopology(channel);
 
-        let consume = await channel.consume(this.queueName, (msg: ConsumeMessage | null) => {
+        let consume = await channel.consume(this.queueName, async (msg: ConsumeMessage | null) => {
             if (msg === null) return;
 
             try {
@@ -113,14 +96,13 @@ export class ReceiveEndpoint extends Transport implements ReceiveEndpointConfigu
                     let messageType = context.messageType[0];
 
                     let deserializer = this._messageTypes[messageType];
-                    if (deserializer instanceof MessageTypeDeserializer) {
-                        deserializer.dispatch(text);
+                    if (deserializer instanceof AsyncMessageTypeDeserializer) {
+                        await deserializer.handle(text);
                     }
                 }
 
                 channel.ack(msg);
-            }
-            catch (e) {
+            } catch (e) {
                 channel.reject(msg, true);
             }
         }, this.options);
@@ -146,27 +128,21 @@ export class ReceiveEndpoint extends Transport implements ReceiveEndpointConfigu
     }
 }
 
-export interface ReceiveEndpointOptions extends Options.AssertQueue, Options.AssertExchange, Options.Consume {
-    prefetchCount: number
-    globalPrefetch: boolean
-    exclusive?: boolean
-    durable?: boolean
-    autoDelete?: boolean
-    arguments?: any
-    messageTtl?: number
-    expires?: number
-    deadLetterExchange?: string
-    deadLetterRoutingKey?: string
-    maxLength?: number
-    maxPriority?: number
+export class AsyncMessageTypeDeserializer<T extends MessageMap> {
+    private readonly receiveEndpoint: AsyncReceiveEndpoint;
+    private readonly handler: (context: ConsumeContext<T>) => Promise<void>;
+
+    constructor(receiveEndpoint: AsyncReceiveEndpoint, handler: (context: ConsumeContext<T>) => Promise<void>) {
+        this.receiveEndpoint = receiveEndpoint;
+        this.handler = handler;
+    }
+
+    handle(json: string): Promise<void> {
+
+        let context = <ConsumeContext<T>>deserialize(ConsumeContext, json);
+
+        context.receiveEndpoint = this.receiveEndpoint;
+
+        return this.handler(context)
+    }
 }
-
-export const defaultReceiveEndpointOptions: ReceiveEndpointOptions = {
-    prefetchCount: 1,
-    globalPrefetch: true,
-    durable: true,
-    autoDelete: false,
-    noAck: false,
-};
-
-

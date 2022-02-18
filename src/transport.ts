@@ -119,7 +119,6 @@ export class Transport extends EventEmitter implements Transport {
             if (!pendingPublish) break;
 
             let {exchange, message, routingKey, options} = pendingPublish;
-
             await this.basicPublish(exchange, routingKey, message, options);
         }
     }
@@ -129,7 +128,7 @@ export class Transport extends EventEmitter implements Transport {
         if (this.channel) {
             let channel = this.channel;
             return new Promise((resolve, reject) => {
-                const result = channel.publish(exchange, routingKey, body, options,
+                const result = channel.publish(exchange, routingKey, body, {persistent: true, contentType: "application/vnd.masstransit+json", ...options},
                     err => {
                         if (err) {
                             reject(err);
