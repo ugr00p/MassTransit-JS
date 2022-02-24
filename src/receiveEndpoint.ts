@@ -131,7 +131,7 @@ export class ReceiveEndpoint extends Transport implements ReceiveEndpointConfigu
 
     private async configureTopology(channel: ConfirmChannel) {
         await channel.prefetch(this.options.prefetchCount, this.options.globalPrefetch);
-        await channel.assertExchange(this.queueName, 'fanout', this.options);
+        await channel.assertExchange(this.exchangeName, 'fanout', this.options);
         let queue = await channel.assertQueue(this.queueName, this.options);
 
         await channel.bindQueue(this.queueName, this.exchangeName, '');
