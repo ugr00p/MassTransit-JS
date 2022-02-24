@@ -3,7 +3,7 @@ import {Transport} from './transport';
 import {MessageMap} from './serialization';
 
 export interface SendEndpoint {
-    send<T extends MessageMap>(message: T, cb?: (send: SendContext<T>) => void): Promise<void>
+    send<T extends MessageMap>(message: T, options?: any, cb?: (send: SendContext<T>) => void): Promise<void>
 }
 
 export class SendEndpoint implements SendEndpoint {

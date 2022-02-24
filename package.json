@@ -1,6 +1,6 @@
 {
   "name": "@ugr00p/masstransit-js",
-  "version": "0.1.5",
+  "version": "0.1.12",
   "publishConfig": {
     "registry": "https://npm.pkg.github.com/ugr00p",
     "access": "public"

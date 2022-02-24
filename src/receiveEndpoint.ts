@@ -29,6 +29,7 @@ export interface ReceiveEndpoint {
 
 export class ReceiveEndpoint extends Transport implements ReceiveEndpointConfigurator, ReceiveEndpoint {
     queueName: string;
+    exchangeName: string;
     options: ReceiveEndpointOptions;
 
     handle<T extends Record<string, any>>(messageType: MessageType, listener: (message: ConsumeContext<T>) => void): this {
@@ -70,7 +71,7 @@ export class ReceiveEndpoint extends Transport implements ReceiveEndpointConfigu
 
     constructor(bus: Bus, queueName: string, cb?: (cfg: ReceiveEndpointConfigurator) => void, options: ReceiveEndpointOptions = defaultReceiveEndpointOptions) {
         super(bus);
-
+        this.exchangeName = queueName;
         this.queueName = queueName;
         this.options = options;
         this.hostAddress = bus.hostAddress;
@@ -130,11 +131,10 @@ export class ReceiveEndpoint extends Transport implements ReceiveEndpointConfigu
 
     private async configureTopology(channel: ConfirmChannel) {
         await channel.prefetch(this.options.prefetchCount, this.options.globalPrefetch);
-
         await channel.assertExchange(this.queueName, 'fanout', this.options);
         let queue = await channel.assertQueue(this.queueName, this.options);
 
-        await channel.bindQueue(this.queueName, this.queueName, '');
+        await channel.bindQueue(this.queueName, this.exchangeName, '');
 
         console.log('Queue:', queue.queue, 'MessageCount:', queue.messageCount, 'ConsumerCount:', queue.consumerCount);
     }
